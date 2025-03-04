@@ -8,13 +8,21 @@ using TcpListener server = new(IPAddress.Any, 4221); // TcpListener is unmanaged
 server.Start();
 
 // wait for a client to connect
-using Socket client = server.AcceptSocket(); // Socket is unmanaged resource
+using var client = server.AcceptSocket(); // Socket is unmanaged resource
+
+// receive request from the client
+var requestBytes = new byte[1024];
+var bytesRead = client.Receive(requestBytes);
+var request = Encoding.UTF8.GetString(requestBytes, 0, bytesRead);
+
+// extract request target
+var requestTarget = request.Split(' ')[1];
 
 // create HTTP response
-string response = "HTTP/1.1 200 OK\r\n\r\n";
-byte[] responseBytes = Encoding.UTF8.GetBytes(response);
+var status = string.IsNullOrEmpty(requestTarget) || requestTarget == "/" ? $"200 OK" : "404 Not Found";
+var responseBytes = Encoding.UTF8.GetBytes($"HTTP/1.1 {status}\r\n\r\n");
 
 // send response to the client
 client.Send(responseBytes);
 
-Console.WriteLine("Server stopped.");
+Console.WriteLine("Stopping server...");
