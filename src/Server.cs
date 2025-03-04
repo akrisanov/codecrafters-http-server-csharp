@@ -14,18 +14,25 @@ using var client = server.AcceptSocket(); // Socket is unmanaged resource
 var requestBytes = new byte[1024];
 var bytesRead = client.Receive(requestBytes);
 var request = Encoding.UTF8.GetString(requestBytes, 0, bytesRead);
-var requestParts = request.Split(' ');
+var requestMembers = request.Split("\r\n");
 
-// extract request target
-var requestTarget = requestParts[1];
-var urlParams = requestTarget.TrimStart('/').Split('/');
-var requestPath = urlParams[0];
+// parse the request
+var requestTarget = requestMembers[0].Split(' ')[1]; // URL
+var urlPath = requestTarget.TrimStart('/').Split('/');
+var requestPath = urlPath[0]; // endpoint or page
+
+// parse headers
+var userAgentHeader = requestMembers.FirstOrDefault(p => p.StartsWith("User-Agent:"))?.Split(": ")[1] ?? "";
 
 var (status, content) = requestPath switch
 {
-    "" => ("200 OK", string.Empty),
-    "echo" => ("200 OK", urlParams[1]),
-    _ => ("404 Not Found", string.Empty)
+    "" => ("200 OK", ""),
+    // return URL parameter as the response content
+    "echo" => ("200 OK", urlPath[1]),
+    // return User-Agent header as the response content
+    "user-agent" => ("200 OK", userAgentHeader),
+    // otherwise, return 404 Not Found
+    _ => ("404 Not Found", "")
 };
 
 // create HTTP response
