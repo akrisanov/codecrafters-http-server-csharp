@@ -14,13 +14,23 @@ using var client = server.AcceptSocket(); // Socket is unmanaged resource
 var requestBytes = new byte[1024];
 var bytesRead = client.Receive(requestBytes);
 var request = Encoding.UTF8.GetString(requestBytes, 0, bytesRead);
+var requestParts = request.Split(' ');
 
 // extract request target
-var requestTarget = request.Split(' ')[1];
+var requestTarget = requestParts[1];
+var urlParams = requestTarget.TrimStart('/').Split('/');
+var requestPath = urlParams[0];
+
+var (status, content) = requestPath switch
+{
+    "" => ("200 OK", string.Empty),
+    "echo" => ("200 OK", urlParams[1]),
+    _ => ("404 Not Found", string.Empty)
+};
 
 // create HTTP response
-var status = string.IsNullOrEmpty(requestTarget) || requestTarget == "/" ? $"200 OK" : "404 Not Found";
-var responseBytes = Encoding.UTF8.GetBytes($"HTTP/1.1 {status}\r\n\r\n");
+var responseBytes = Encoding.UTF8.GetBytes(
+    $"HTTP/1.1 {status}\r\nContent-Type: text/plain\r\nContent-Length: {content.Length}\r\n\r\n{content}");
 
 // send response to the client
 client.Send(responseBytes);
