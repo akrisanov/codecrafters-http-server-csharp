@@ -2,10 +2,10 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
-Dictionary<int, string> HttpStatusCodes = new()
+Dictionary<int, string> httpStatusCodes = new()
 {
-    [200] = "OK",
-    [404] = "Not Found",
+    [200] = "200 OK",
+    [404] = "404 Not Found",
 };
 
 Console.WriteLine("Starting server...");
@@ -45,32 +45,35 @@ async Task HandleClientConnectionAsync()
         var userAgentHeader = requestMembers.FirstOrDefault(p => p.StartsWith("User-Agent:"))?.Split(": ")[1] ?? "";
 
         // build a response
-        var status = HttpStatusCodes[200];
+        var status = httpStatusCodes[200];
         var headers = new Dictionary<string, object>
         {
             ["Connection"] = "keep-alive",
             ["Content-Type"] = "text/plain",
             ["Content-Length"] = 0,
         };
-        var content = ""u8.ToArray();
+        var content = "";
 
         switch (requestPath)
         {
             case "": // root URL
                 break;
             case "echo": // return URL parameter as the response content
-                content = Encoding.UTF8.GetBytes(urlPath[1]);
-                break;
-            case "user-agent": // return User-Agent header as the response content
-                content = Encoding.UTF8.GetBytes(userAgentHeader);
-                break;
-            case "files": // serve files from the specified directory --directory
-                (status, content) = await ServeFileAsync(args[0], urlPath[1]);
-                headers["Content-Type"] = "application/octet-stream";
+                content = urlPath[1];
                 headers["Content-Length"] = content.Length;
                 break;
+            case "user-agent": // return User-Agent header as the response content
+                content = userAgentHeader;
+                headers["Content-Length"] = content.Length;
+                break;
+            case "files": // serve files from the specified directory --directory
+                (status, var fileContent) = await ServeFileAsync(args[1], urlPath[1]);
+                headers["Content-Type"] = "application/octet-stream";
+                headers["Content-Length"] = fileContent.Length;
+                content = Encoding.UTF8.GetString(fileContent);
+                break;
             default:
-                status = HttpStatusCodes[404];
+                status = httpStatusCodes[404];
                 break;
         }
 
@@ -82,10 +85,10 @@ async Task HandleClientConnectionAsync()
             response.Append($"{key}: {value}\r\n");
         }
         response.Append("\r\n");
-        response.Append(Encoding.UTF8.GetString(content));
-        var responseBytes = Encoding.UTF8.GetBytes(response.ToString());
+        response.Append(content);
 
         // send response to the client
+        var responseBytes = Encoding.UTF8.GetBytes(response.ToString());
         await client.SendAsync(responseBytes);
     }
 }
@@ -96,7 +99,7 @@ async Task<(string status, byte[] content)> ServeFileAsync(string fileDir, strin
     if (File.Exists(filePath))
     {
         var fileContent = await File.ReadAllBytesAsync(filePath);
-        return (HttpStatusCodes[200], fileContent);
+        return (httpStatusCodes[200], fileContent);
     }
-    return (HttpStatusCodes[404], Array.Empty<byte>());
+    return (httpStatusCodes[404], []);
 }
