@@ -56,20 +56,20 @@ async Task HandleClientConnectionAsync()
             ["Content-Type"] = "text/plain",
             ["Content-Length"] = 0,
         };
-        var content = "";
+        byte[] content = [];
 
         switch (endpoint)
         {
             case "": // root URL
                 break;
             case "echo": // return URL parameter as the response content
-                content = urlPath[1];
+                content = Encoding.UTF8.GetBytes(urlPath[1]);
                 headers["Content-Length"] = content.Length;
                 break;
             case "user-agent": // return User-Agent header as the response content
                 var userAgentHeader = requestMembers.FirstOrDefault(p => p.StartsWith("User-Agent"));
                 var userAgent = userAgentHeader?.Split(": ")[1] ?? "";
-                content = userAgent;
+                content = Encoding.UTF8.GetBytes(userAgent);
                 headers["Content-Length"] = content.Length;
                 break;
             case "files": // serve files from the specified directory --directory
@@ -78,7 +78,7 @@ async Task HandleClientConnectionAsync()
                     (status, var fileContent) = await ServeFileAsync(filesDir, urlPath[1]);
                     headers["Content-Type"] = "application/octet-stream";
                     headers["Content-Length"] = fileContent.Length;
-                    content = Encoding.UTF8.GetString(fileContent);
+                    content = fileContent;
                 }
                 else if (requestMethod == "POST")
                 {
@@ -106,21 +106,26 @@ async Task HandleClientConnectionAsync()
         {
             headers["Content-Encoding"] = "gzip";
             content = CompressWithGzip(content);
+            headers["Content-Length"] = content.Length;
         }
 
         // create HTTP response by combining status line, headers, and content
+        byte[] responseBytes;
 
-        var response = new StringBuilder();
-        response.Append($"HTTP/1.1 {status}\r\n");
+        var headerString = new StringBuilder();
+        headerString.Append($"HTTP/1.1 {status}\r\n");
         foreach (var (key, value) in headers)
         {
-            response.Append($"{key}: {value}\r\n");
+            headerString.Append($"{key}: {value}\r\n");
         }
-        response.Append("\r\n");
-        response.Append(content);
+        headerString.Append("\r\n");
+
+        var headerBytes = Encoding.UTF8.GetBytes(headerString.ToString());
+        responseBytes = new byte[headerBytes.Length + content.Length];
+        Buffer.BlockCopy(headerBytes, 0, responseBytes, 0, headerBytes.Length);
+        Buffer.BlockCopy(content, 0, responseBytes, headerBytes.Length, content.Length);
 
         // send response to the client
-        var responseBytes = Encoding.UTF8.GetBytes(response.ToString());
         await client.SendAsync(responseBytes);
     }
 }
@@ -157,14 +162,13 @@ static string GetFilesDir(string[] args)
     return dirName;
 }
 
-static string CompressWithGzip(string text)
+static byte[] CompressWithGzip(byte[] bytes)
 {
-    var bytes = Encoding.UTF8.GetBytes(text);
     using var msi = new MemoryStream(bytes);
     using var mso = new MemoryStream();
     using (var gs = new GZipStream(mso, CompressionMode.Compress))
     {
         msi.CopyTo(gs);
     }
-    return Convert.ToBase64String(mso.ToArray());
+    return mso.ToArray();
 }
