@@ -99,8 +99,10 @@ async Task HandleClientConnectionAsync()
 
         // support compression
         var acceptEncodingHeader = requestMembers.FirstOrDefault(p => p.StartsWith("Accept-Encoding"));
-        var acceptEncoding = acceptEncodingHeader?.Split(": ")[1] ?? "";
-        if (acceptEncoding.Contains("gzip"))
+        string acceptEncoding = acceptEncodingHeader?.Split(": ")[1] ?? "";
+        var compressionSchemes = acceptEncoding.Split(", ");
+
+        if (compressionSchemes.Contains("gzip"))
         {
             headers["Content-Encoding"] = "gzip";
             content = CompressWithGzip(content);
