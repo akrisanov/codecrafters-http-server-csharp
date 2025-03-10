@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -96,7 +97,17 @@ async Task HandleClientConnectionAsync()
                 break;
         }
 
+        // support compression
+        var acceptEncodingHeader = requestMembers.FirstOrDefault(p => p.StartsWith("Accept-Encoding"));
+        var acceptEncoding = acceptEncodingHeader?.Split(": ")[1] ?? "";
+        if (acceptEncoding.Contains("gzip"))
+        {
+            headers["Content-Encoding"] = "gzip";
+            content = CompressWithGzip(content);
+        }
+
         // create HTTP response by combining status line, headers, and content
+
         var response = new StringBuilder();
         response.Append($"HTTP/1.1 {status}\r\n");
         foreach (var (key, value) in headers)
@@ -131,7 +142,7 @@ async Task<string> CreateFileAsync(string dirName, string fileName, string conte
     return httpStatusCodes[201];
 }
 
-string GetFilesDir(string[] args)
+static string GetFilesDir(string[] args)
 {
     var dirName = "/tmp";
     if (args.Length < 2 || args[0] != "--directory") return dirName;
@@ -142,4 +153,16 @@ string GetFilesDir(string[] args)
         throw new ArgumentException($"Directory {dirName} does not exist");
     }
     return dirName;
+}
+
+static string CompressWithGzip(string text)
+{
+    var bytes = Encoding.UTF8.GetBytes(text);
+    using var msi = new MemoryStream(bytes);
+    using var mso = new MemoryStream();
+    using (var gs = new GZipStream(mso, CompressionMode.Compress))
+    {
+        msi.CopyTo(gs);
+    }
+    return Convert.ToBase64String(mso.ToArray());
 }
